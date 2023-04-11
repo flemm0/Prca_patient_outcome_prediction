@@ -1,5 +1,4 @@
-# Prostate Cancer Patient Outcome Prediction using Clinical and Genomic
-Features
+# Prostate Cancer Patient Outcome Prediction using Clinical and Genomic Features
 
 ``` python
 %%html
@@ -9,12 +8,6 @@ body {
 }
 </style>
 ```
-
-<style>
-body {
-    font-family: "Consolas", Times;
-}
-</style>
 
 #### Flemming Wu
 
@@ -75,17 +68,6 @@ df.head()
 ```
 
 <div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-&#10;    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-&#10;    .dataframe thead th {
-        text-align: right;
-    }
-</style>
 
 |     | study_id               | patient_id | sample_id         | 8q_arm  | age_at_diagnosis | age_at_procurement | cancer_type     | cancer_type_detailed              | disease_extent_at_time_impact_was_sent | fraction_genome_altered | ... | PTPRS | PTPRD | BRAF | FAM175A | SDHA | PDPK1 | BAP1 | SDHB | SDHD | PRKAR1A |
 |-----|------------------------|------------|-------------------|---------|------------------|--------------------|-----------------|-----------------------------------|----------------------------------------|-------------------------|-----|-------|-------|------|---------|------|-------|------|------|------|---------|
@@ -254,7 +236,7 @@ for col, ax in zip(df[missing].columns, axs.flat):
         sns.boxplot(data=df, x=col, ax=ax)
 ```
 
-![](README_files/figure-commonmark/cell-14-output-1.png#gh-dark-mode-only)
+![](README_files/figure-commonmark/cell-14-output-1.png)
 
 ``` python
 df['mutation_count'].corr(df['tmb_(nonsynonymous)'])
@@ -272,7 +254,7 @@ sns.violinplot(data=df, y='prostate-specific_antigen', ax=axes[0])
 sns.boxplot(data=df, y='prostate-specific_antigen', ax=axes[1]);
 ```
 
-![](README_files/figure-commonmark/cell-16-output-1.png#gh-dark-mode-only)
+![](README_files/figure-commonmark/cell-16-output-1.png)
 
 According to the NIH National Cancer Institute, PSA levels of 4.0 ng/mL
 and lower are considered normal. Here, there can be some outliers seen
