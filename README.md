@@ -19,7 +19,7 @@ body {
 - [Encoding Categorical Variables](#fourth-bullet)
 - [Feature Selection](#fifth-bullet)
 - [Model Building](#sixth-bullet)
-- [Hyperparamter Tuning](#seventh-bullet)
+- [Hyperparameter Tuning](#seventh-bullet)
 
 ### Import packages
 
