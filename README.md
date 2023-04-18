@@ -10,7 +10,7 @@
 - [Encoding Categorical Variables](#fourth-bullet)
 - [Feature Selection](#fifth-bullet)
 - [Model Building](#sixth-bullet)
-- [Hyperparamter Tuning](#seventh-bullet)
+- [Hyperparameter Tuning](#seventh-bullet)
 
 ### Import packages
 
@@ -21,7 +21,6 @@ import matplotlib.pyplot as plt
 %matplotlib inline
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
@@ -29,7 +28,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
-from sklearn.model_selection import GridSearchCV, KFold, RandomizedSearchCV
+from sklearn.model_selection import GridSearchCV, KFold, RandomizedSearchCV, train_test_split
 from sklearn.feature_selection import f_classif, SelectKBest, RFE
 from imblearn.over_sampling import SMOTENC
 from boruta import BorutaPy
