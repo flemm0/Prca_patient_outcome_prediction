@@ -1,3 +1,5 @@
 old-code/*
 prad_msk_stopsack_2021/*
 .jupyter_cache/*
+hyperparameter_tuning.ipynb
+processed_data.csv
