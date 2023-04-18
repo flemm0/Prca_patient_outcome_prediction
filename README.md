@@ -1,13 +1,12 @@
-# Prostate Cancer Patient Outcome Prediction using Clinical and Genomic Features
+# Prostate Cancer Patient Outcome Prediction using Clinical and Genomic
+Features
 
-``` python
 %%html
 <style>
 body {
     font-family: "Consolas", Times;
 }
 </style>
-```
 
 #### Flemming Wu
 
@@ -19,7 +18,7 @@ body {
 - [Encoding Categorical Variables](#fourth-bullet)
 - [Feature Selection](#fifth-bullet)
 - [Model Building](#sixth-bullet)
-- [Hyperparameter Tuning](#seventh-bullet)
+- [Hyperparamter Tuning](#seventh-bullet)
 
 ### Import packages
 
@@ -38,20 +37,17 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
-from sklearn.model_selection import GridSearchCV, KFold
+from sklearn.model_selection import GridSearchCV, KFold, RandomizedSearchCV
 from sklearn.feature_selection import f_classif, SelectKBest, RFE
 from imblearn.over_sampling import SMOTENC
 from boruta import BorutaPy
 from xgboost import XGBClassifier
+from scipy.stats import randint, uniform
 ```
 
 ### Read in data from cBioPortal
 
 <https://www.cbioportal.org/study/summary?id=prad_msk_stopsack_2021>
-
-``` python
-plt.rcParams['figure.facecolor']='#111111'
-```
 
 ``` python
 clinical_df = pd.read_csv('./prad_msk_stopsack_2021_clinical_data.tsv', sep='\t')
@@ -68,6 +64,17 @@ df.head()
 ```
 
 <div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 
 |     | study_id               | patient_id | sample_id         | 8q_arm  | age_at_diagnosis | age_at_procurement | cancer_type     | cancer_type_detailed              | disease_extent_at_time_impact_was_sent | fraction_genome_altered | ... | PTPRS | PTPRD | BRAF | FAM175A | SDHA | PDPK1 | BAP1 | SDHB | SDHD | PRKAR1A |
 |-----|------------------------|------------|-------------------|---------|------------------|--------------------|-----------------|-----------------------------------|----------------------------------------|-------------------------|-----|-------|-------|------|---------|------|-------|------|------|------|---------|
@@ -85,6 +92,17 @@ df.describe()
 ```
 
 <div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 
 |       | age_at_diagnosis | age_at_procurement | fraction_genome_altered | mutation_count | prostate-specific_antigen | number_of_samples_per_patient | tmb\_(nonsynonymous) | TAP1        | ERRFI1      | STK19       | ... | PTPRS       | PTPRD       | BRAF        | FAM175A    | SDHA        | PDPK1  | BAP1       | SDHB        | SDHD        | PRKAR1A     |
 |-------|------------------|--------------------|-------------------------|----------------|---------------------------|-------------------------------|----------------------|-------------|-------------|-------------|-----|-------------|-------------|-------------|------------|-------------|--------|------------|-------------|-------------|-------------|
@@ -105,6 +123,17 @@ df.number_of_samples_per_patient.to_frame().query('number_of_samples_per_patient
 ```
 
 <div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 
 |     | number_of_samples_per_patient |
 |-----|-------------------------------|
@@ -211,6 +240,17 @@ df.isnull().sum().to_frame('num_missing').sort_values('num_missing', ascending=F
 ```
 
 <div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 
 |                           | num_missing |
 |---------------------------|-------------|
@@ -227,6 +267,7 @@ df.isnull().sum().to_frame('num_missing').sort_values('num_missing', ascending=F
 missing = ['gleason_grade', 'mutation_count', 'prostate-specific_antigen', 'sample_type', 'smoking', 'tumor_sample_histology']
 
 fig, axs = plt.subplots(2,3, figsize=(16,7))
+fig.set_facecolor('w')
 for col, ax in zip(df[missing].columns, axs.flat):
     if df[col].dtype == object:
         sns.countplot(data=df, x=col, ax=ax)
@@ -236,13 +277,13 @@ for col, ax in zip(df[missing].columns, axs.flat):
         sns.boxplot(data=df, x=col, ax=ax)
 ```
 
-![](README_files/figure-commonmark/cell-14-output-1.png)
+![](README_files/figure-commonmark/cell-12-output-1.png)
 
 ``` python
 df['mutation_count'].corr(df['tmb_(nonsynonymous)'])
 ```
 
-    0.9992752138120059
+    0.9992752138120058
 
 Tumor mutational burden and mutation count are highly correlated, as
 expected. Since they represent the same information, I will drop the
@@ -251,10 +292,11 @@ mutation count column and keep tumor mutational burden.
 ``` python
 fig, axes = plt.subplots(1, 2, figsize=(14,7))
 sns.violinplot(data=df, y='prostate-specific_antigen', ax=axes[0])
-sns.boxplot(data=df, y='prostate-specific_antigen', ax=axes[1]);
+sns.boxplot(data=df, y='prostate-specific_antigen', ax=axes[1])
+fig.set_facecolor('w');
 ```
 
-![](README_files/figure-commonmark/cell-16-output-1.png)
+![](README_files/figure-commonmark/cell-14-output-1.png)
 
 According to the NIH National Cancer Institute, PSA levels of 4.0 ng/mL
 and lower are considered normal. Here, there can be some outliers seen
@@ -331,10 +373,11 @@ df.shape
 
 ``` python
 fig, ax = plt.subplots(figsize=(10,7))
-ax = sns.countplot(data=df, x='patients_vital_status');
+ax = sns.countplot(data=df, x='patients_vital_status')
+fig.set_facecolor('w');
 ```
 
-![](README_files/figure-commonmark/cell-20-output-1.png)
+![](README_files/figure-commonmark/cell-18-output-1.png)
 
 The minority class makes up a little less than 30% of target variables,
 so there is some mild class imbalance. If the model always predicts 1,
@@ -367,27 +410,29 @@ X_res, y_res = sm.fit_resample(df.loc[:, df.columns != 'patients_vital_status'].
 df_before_sampling = df.copy()
 
 # reassign df to new sampled data set
-df = X_res
+df = X_res.copy()
 df['target'] = y_res
 ```
 
 ``` python
 fig, ax = plt.subplots(figsize=(10,7))
-ax = sns.countplot(data=df, x='target');
+ax = sns.countplot(data=df, x='target')
+fig.set_facecolor('w');
 ```
 
-![](README_files/figure-commonmark/cell-23-output-1.png)
+![](README_files/figure-commonmark/cell-21-output-1.png)
 
 ## Encoding Categorical Variables <a class="anchor" id="fourth-bullet"></a>
 
 ``` python
 ## plot value counts of categorical columns
 fig, axs = plt.subplots(6, 2, figsize=(20,15), tight_layout=True)
+fig.set_facecolor('w')
 for col, ax in zip(df.select_dtypes(object), axs.flat):
     sns.countplot(data=df, y=col, ax=ax)
 ```
 
-![](README_files/figure-commonmark/cell-24-output-1.png)
+![](README_files/figure-commonmark/cell-22-output-1.png)
 
 How I will encode the categorical variables:
 
@@ -469,12 +514,15 @@ df_genomic.shape
 
 mutation_counts = df_genomic.iloc[:,:-1].abs().sum(axis=0).sort_values(ascending=False).to_frame('abs_cna')
 mutation_counts.hist(bins=100, figsize=(10,6))
+fig = plt.gcf()
+fig.set_facecolor('w')
 plt.title('Number of Genomic Alterations by Gene')
 plt.ylabel('Count')
-plt.xlabel('Number of Alterations');
+plt.xlabel('Number of Alterations')
+plt.show();
 ```
 
-![](README_files/figure-commonmark/cell-29-output-1.png)
+![](README_files/figure-commonmark/cell-27-output-1.png)
 
 ##### Drop all genes with 0 alterations in all samples
 
@@ -564,17 +612,40 @@ X_scaled = StandardScaler().fit_transform(X)
 X_scaled = pd.DataFrame(X_scaled, columns=X.columns)
 
 lr = LogisticRegression(solver='liblinear', max_iter=400, penalty='l1', random_state=3)
+
 params = [{
     'C' : [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1]  # the smaller the C, the stronger the penalty
 }]
 
-gs = GridSearchCV(estimator=lr, param_grid=params, cv=KFold(n_splits=5, shuffle=True, random_state=42), scoring='roc_auc')
+gs = GridSearchCV(
+    estimator=lr, 
+    param_grid=params, 
+    cv=KFold(n_splits=5, shuffle=True, random_state=42), 
+    scoring='roc_auc'
+)
+
 gs.fit(X_scaled, y)
-gs.best_estimator_
+gs.best_estimator_.get_params()
 ```
 
+    {'C': 1,
+     'class_weight': None,
+     'dual': False,
+     'fit_intercept': True,
+     'intercept_scaling': 1,
+     'l1_ratio': None,
+     'max_iter': 400,
+     'multi_class': 'auto',
+     'n_jobs': None,
+     'penalty': 'l1',
+     'random_state': 3,
+     'solver': 'liblinear',
+     'tol': 0.0001,
+     'verbose': 0,
+     'warm_start': False}
+
 ``` python
-lr_lasso = LogisticRegression(solver='liblinear', max_iter=400, penalty='l1', C=1, random_state=3)
+lr_lasso = LogisticRegression(**gs.best_estimator_.get_params())
 lr_lasso.fit(X_scaled, y)
 
 lasso_features_df = pd.DataFrame({
@@ -586,6 +657,17 @@ lasso_features_df.head(10)
 ```
 
 <div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 
 |     | coefficients | features |
 |-----|--------------|----------|
@@ -618,24 +700,65 @@ print('Number of remaining features: {}'.format(len(X_scaled.columns)))
 ## First find best Random Forest model using 5-fold cross validation
 
 rf = RandomForestClassifier(n_jobs=-1, random_state=3)
+
 params = [{
     'criterion' : ['gini', 'entropy', 'log_loss'],
     'max_depth' : list(range(5, 11, 1)),
     'n_estimators' : list(range(100, 501, 100))
 }]
 
-gs = GridSearchCV(estimator=rf, param_grid=params, cv=KFold(n_splits=5, shuffle=True, random_state=42), scoring='roc_auc')
+gs = GridSearchCV(
+    estimator=rf, 
+    param_grid=params, 
+    cv=KFold(n_splits=5, shuffle=True, random_state=42), 
+    scoring='roc_auc',
+    n_jobs=-1
+)
+
 gs.fit(X_scaled, y)
-gs.best_estimator_
+gs.best_estimator_.get_params()
 ```
 
+    {'bootstrap': True,
+     'ccp_alpha': 0.0,
+     'class_weight': None,
+     'criterion': 'gini',
+     'max_depth': 10,
+     'max_features': 'sqrt',
+     'max_leaf_nodes': None,
+     'max_samples': None,
+     'min_impurity_decrease': 0.0,
+     'min_samples_leaf': 1,
+     'min_samples_split': 2,
+     'min_weight_fraction_leaf': 0.0,
+     'n_estimators': 500,
+     'n_jobs': -1,
+     'oob_score': False,
+     'random_state': 3,
+     'verbose': 0,
+     'warm_start': False}
+
 ``` python
-rf = RandomForestClassifier(n_jobs=-1, max_depth=10, criterion='log_loss', n_estimators=500, random_state=3)
+rf = RandomForestClassifier(**gs.best_estimator_.get_params())
 rf.fit(X_scaled, y)
 
 boruta = BorutaPy(rf, n_estimators='auto', verbose=0, random_state=10, alpha=0.01)
 boruta.fit(X_scaled.values, y)
 ```
+
+<style>#sk-container-id-1 {color: black;background-color: white;}#sk-container-id-1 pre{padding: 0;}#sk-container-id-1 div.sk-toggleable {background-color: white;}#sk-container-id-1 label.sk-toggleable__label {cursor: pointer;display: block;width: 100%;margin-bottom: 0;padding: 0.3em;box-sizing: border-box;text-align: center;}#sk-container-id-1 label.sk-toggleable__label-arrow:before {content: "▸";float: left;margin-right: 0.25em;color: #696969;}#sk-container-id-1 label.sk-toggleable__label-arrow:hover:before {color: black;}#sk-container-id-1 div.sk-estimator:hover label.sk-toggleable__label-arrow:before {color: black;}#sk-container-id-1 div.sk-toggleable__content {max-height: 0;max-width: 0;overflow: hidden;text-align: left;background-color: #f0f8ff;}#sk-container-id-1 div.sk-toggleable__content pre {margin: 0.2em;color: black;border-radius: 0.25em;background-color: #f0f8ff;}#sk-container-id-1 input.sk-toggleable__control:checked~div.sk-toggleable__content {max-height: 200px;max-width: 100%;overflow: auto;}#sk-container-id-1 input.sk-toggleable__control:checked~label.sk-toggleable__label-arrow:before {content: "▾";}#sk-container-id-1 div.sk-estimator input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-1 div.sk-label input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-1 input.sk-hidden--visually {border: 0;clip: rect(1px 1px 1px 1px);clip: rect(1px, 1px, 1px, 1px);height: 1px;margin: -1px;overflow: hidden;padding: 0;position: absolute;width: 1px;}#sk-container-id-1 div.sk-estimator {font-family: monospace;background-color: #f0f8ff;border: 1px dotted black;border-radius: 0.25em;box-sizing: border-box;margin-bottom: 0.5em;}#sk-container-id-1 div.sk-estimator:hover {background-color: #d4ebff;}#sk-container-id-1 div.sk-parallel-item::after {content: "";width: 100%;border-bottom: 1px solid gray;flex-grow: 1;}#sk-container-id-1 div.sk-label:hover label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-1 div.sk-serial::before {content: "";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: 0;}#sk-container-id-1 div.sk-serial {display: flex;flex-direction: column;align-items: center;background-color: white;padding-right: 0.2em;padding-left: 0.2em;position: relative;}#sk-container-id-1 div.sk-item {position: relative;z-index: 1;}#sk-container-id-1 div.sk-parallel {display: flex;align-items: stretch;justify-content: center;background-color: white;position: relative;}#sk-container-id-1 div.sk-item::before, #sk-container-id-1 div.sk-parallel-item::before {content: "";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: -1;}#sk-container-id-1 div.sk-parallel-item {display: flex;flex-direction: column;z-index: 1;position: relative;background-color: white;}#sk-container-id-1 div.sk-parallel-item:first-child::after {align-self: flex-end;width: 50%;}#sk-container-id-1 div.sk-parallel-item:last-child::after {align-self: flex-start;width: 50%;}#sk-container-id-1 div.sk-parallel-item:only-child::after {width: 0;}#sk-container-id-1 div.sk-dashed-wrapped {border: 1px dashed gray;margin: 0 0.4em 0.5em 0.4em;box-sizing: border-box;padding-bottom: 0.4em;background-color: white;}#sk-container-id-1 div.sk-label label {font-family: monospace;font-weight: bold;display: inline-block;line-height: 1.2em;}#sk-container-id-1 div.sk-label-container {text-align: center;}#sk-container-id-1 div.sk-container {/* jupyter's `normalize.less` sets `[hidden] { display: none; }` but bootstrap.min.css set `[hidden] { display: none !important; }` so we also need the `!important` here to be able to override the default hidden behavior on the sphinx rendered scikit-learn.org. See: https://github.com/scikit-learn/scikit-learn/issues/21755 */display: inline-block !important;position: relative;}#sk-container-id-1 div.sk-text-repr-fallback {display: none;}</style><div id="sk-container-id-1" class="sk-top-container"><div class="sk-text-repr-fallback"><pre>BorutaPy(alpha=0.01,
+         estimator=RandomForestClassifier(max_depth=10, n_estimators=64,
+                                          n_jobs=-1,
+                                          random_state=RandomState(MT19937) at 0x21088A8BA40),
+         n_estimators=&#x27;auto&#x27;,
+         random_state=RandomState(MT19937) at 0x21088A8BA40)</pre><b>In a Jupyter environment, please rerun this cell to show the HTML representation or trust the notebook. <br />On GitHub, the HTML representation is unable to render, please try loading this page with nbviewer.org.</b></div><div class="sk-container" hidden><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-1" type="checkbox" ><label for="sk-estimator-id-1" class="sk-toggleable__label sk-toggleable__label-arrow">BorutaPy</label><div class="sk-toggleable__content"><pre>BorutaPy(alpha=0.01,
+         estimator=RandomForestClassifier(max_depth=10, n_estimators=64,
+                                          n_jobs=-1,
+                                          random_state=RandomState(MT19937) at 0x21088A8BA40),
+         n_estimators=&#x27;auto&#x27;,
+         random_state=RandomState(MT19937) at 0x21088A8BA40)</pre></div></div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-2" type="checkbox" ><label for="sk-estimator-id-2" class="sk-toggleable__label sk-toggleable__label-arrow">estimator: RandomForestClassifier</label><div class="sk-toggleable__content"><pre>RandomForestClassifier(max_depth=10, n_estimators=64, n_jobs=-1,
+                       random_state=RandomState(MT19937) at 0x21088A8BA40)</pre></div></div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-3" type="checkbox" ><label for="sk-estimator-id-3" class="sk-toggleable__label sk-toggleable__label-arrow">RandomForestClassifier</label><div class="sk-toggleable__content"><pre>RandomForestClassifier(max_depth=10, n_estimators=64, n_jobs=-1,
+                       random_state=RandomState(MT19937) at 0x21088A8BA40)</pre></div></div></div></div></div></div></div></div></div></div>
 
 ``` python
 boruta_df = pd.DataFrame({
@@ -648,14 +771,25 @@ boruta_df[boruta_df['Keep'] == True]
 ```
 
 <div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 
 |     | column  | Rank | Keep |
 |-----|---------|------|------|
 | 16  | CCND1   | 1    | True |
 | 19  | PTEN    | 1    | True |
+| 57  | PLCG2   | 1    | True |
 | 90  | RECQL4  | 1    | True |
 | 96  | CCNE1   | 1    | True |
-| 118 | TET1    | 1    | True |
 | 130 | MCL1    | 1    | True |
 | 138 | RB1     | 1    | True |
 | 161 | BRCA2   | 1    | True |
@@ -666,7 +800,9 @@ boruta_df[boruta_df['Keep'] == True]
 | 231 | AKT1    | 1    | True |
 | 238 | MYC     | 1    | True |
 | 254 | AMER1   | 1    | True |
+| 260 | RAD21   | 1    | True |
 | 261 | FGF3    | 1    | True |
+| 266 | AGO2    | 1    | True |
 | 280 | NBN     | 1    | True |
 | 299 | AR      | 1    | True |
 
@@ -684,7 +820,7 @@ df_genomic_filt = df_genomic[top_genes]
 print('Number of remaining features: {}'.format(len(df_genomic_filt.columns)))
 ```
 
-    Number of remaining features: 18
+    Number of remaining features: 20
 
 #### Clinical Data Feature Selection
 
@@ -693,17 +829,18 @@ Check for multicolinearity
 ``` python
 corr = df_clin.corr().round(2)
 
-mask = np.zeros_like(corr, dtype=np.bool)
+mask = np.zeros_like(corr, dtype=bool)
 mask[np.triu_indices_from(mask)] = True
 
 fig, ax = plt.subplots(figsize=(20, 20))
+fig.set_facecolor('w')
 cmap = sns.diverging_palette(220, 10, as_cmap=True)
 
 sns.heatmap(corr, mask=mask, cmap=cmap, square=True, linewidths=0.5, cbar_kws={'shrink':0.5}, annot=True)
 plt.tight_layout()
 ```
 
-![](README_files/figure-commonmark/cell-41-output-2.png)
+![](README_files/figure-commonmark/cell-39-output-1.png)
 
 Age at diagnosis and age at procurement are correlated, which is
 expected. I will drop the age at procurement.
@@ -734,17 +871,18 @@ Recheck correlations
 ``` python
 corr = df_clin.corr().round(2)
 
-mask = np.zeros_like(corr, dtype=np.bool)
+mask = np.zeros_like(corr, dtype=bool)
 mask[np.triu_indices_from(mask)] = True
 
 fig, ax = plt.subplots(figsize=(20, 20))
+fig.set_facecolor('w')
 cmap = sns.diverging_palette(220, 10, as_cmap=True)
 
 sns.heatmap(corr, mask=mask, cmap=cmap, square=True, linewidths=0.5, cbar_kws={'shrink':0.5}, annot=True)
 plt.tight_layout()
 ```
 
-![](README_files/figure-commonmark/cell-43-output-2.png)
+![](README_files/figure-commonmark/cell-41-output-1.png)
 
 ``` python
 df_clin.shape
@@ -770,34 +908,10 @@ lr.fit(X_train, y_train)
 
 print('Training accuracy: {}'.format(lr.score(X_train, y_train)))
 print('Testing accuracy: {}'.format(lr.score(X_test, y_test)))
-
-cm = confusion_matrix(y_test, lr.predict(X_test))
-
-def plot_confusion_matrix(cm):
-
-    # modify confusion matrix
-    modified_cm = []
-    for index,value in enumerate(cm):
-        if index == 0:
-            modified_cm.append(['TN = ' + str(value[0]), 'FP = ' + str(value[1])])
-        if index == 1:
-            modified_cm.append(['FN = ' + str(value[0]), 'TP = ' + str(value[1])])
-
-    # plot
-    plt.figure(figsize=(7,7))
-    sns.heatmap(cm, annot=np.array(modified_cm), cmap='Blues', fmt='', annot_kws={'size':20}, 
-                linewidths=0.5, square=True, xticklabels=['Dead', 'Alive'], yticklabels=['Dead', 'Alive']);
-    plt.ylabel('Actual', fontsize=17)
-    plt.xlabel('Predicted', fontsize=17)
-    plt.tick_params(labelsize=15)
-
-plot_confusion_matrix(cm)
 ```
 
     Training accuracy: 0.7766472868217055
     Testing accuracy: 0.7601744186046512
-
-![](README_files/figure-commonmark/cell-47-output-2.png)
 
 Looks like the baseline Logistic Regression model achieved 76% accuracy
 using all the features.
@@ -819,53 +933,93 @@ as only L1 regularization.
 
 ``` python
 X_scaled = StandardScaler().fit_transform(X)
+
 params = {
     'C' : [0.001, 0.005, 0.01, 0.05, 0.1, 0.5],
     'l1_ratio' : [0, 0.2, 0.4, 0.6, 0.8, 1]
 }
-lr = LogisticRegression(solver='saga', penalty='elasticnet', max_iter=900, random_state=12)
-gs = GridSearchCV(estimator=lr, param_grid=params, cv=KFold(n_splits=5, shuffle=True, random_state=42), n_jobs=-1, scoring='roc_auc')
+
+lr_elastic = LogisticRegression(solver='saga', penalty='elasticnet', max_iter=900, random_state=12)
+
+gs = GridSearchCV(
+    estimator=lr_elastic, 
+    param_grid=params, 
+    cv=KFold(n_splits=5, shuffle=True, random_state=42), 
+    n_jobs=-1, 
+    scoring='roc_auc'
+)
+
 gs.fit(X_scaled, y)
 
-gs.best_estimator_
+gs.best_estimator_.get_params()
 ```
 
+    {'C': 0.1,
+     'class_weight': None,
+     'dual': False,
+     'fit_intercept': True,
+     'intercept_scaling': 1,
+     'l1_ratio': 0.6,
+     'max_iter': 900,
+     'multi_class': 'auto',
+     'n_jobs': None,
+     'penalty': 'elasticnet',
+     'random_state': 12,
+     'solver': 'saga',
+     'tol': 0.0001,
+     'verbose': 0,
+     'warm_start': False}
 
 ``` python
-lr = LogisticRegression(C=0.1, l1_ratio=0.6, max_iter=900, penalty='elasticnet', solver='saga', random_state=3)
-lr.fit(X_scaled, y)
+lr_elastic = LogisticRegression(**gs.best_estimator_.get_params())
+lr_elastic.fit(X_scaled, y)
 ```
+
+<style>#sk-container-id-2 {color: black;background-color: white;}#sk-container-id-2 pre{padding: 0;}#sk-container-id-2 div.sk-toggleable {background-color: white;}#sk-container-id-2 label.sk-toggleable__label {cursor: pointer;display: block;width: 100%;margin-bottom: 0;padding: 0.3em;box-sizing: border-box;text-align: center;}#sk-container-id-2 label.sk-toggleable__label-arrow:before {content: "▸";float: left;margin-right: 0.25em;color: #696969;}#sk-container-id-2 label.sk-toggleable__label-arrow:hover:before {color: black;}#sk-container-id-2 div.sk-estimator:hover label.sk-toggleable__label-arrow:before {color: black;}#sk-container-id-2 div.sk-toggleable__content {max-height: 0;max-width: 0;overflow: hidden;text-align: left;background-color: #f0f8ff;}#sk-container-id-2 div.sk-toggleable__content pre {margin: 0.2em;color: black;border-radius: 0.25em;background-color: #f0f8ff;}#sk-container-id-2 input.sk-toggleable__control:checked~div.sk-toggleable__content {max-height: 200px;max-width: 100%;overflow: auto;}#sk-container-id-2 input.sk-toggleable__control:checked~label.sk-toggleable__label-arrow:before {content: "▾";}#sk-container-id-2 div.sk-estimator input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-2 div.sk-label input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-2 input.sk-hidden--visually {border: 0;clip: rect(1px 1px 1px 1px);clip: rect(1px, 1px, 1px, 1px);height: 1px;margin: -1px;overflow: hidden;padding: 0;position: absolute;width: 1px;}#sk-container-id-2 div.sk-estimator {font-family: monospace;background-color: #f0f8ff;border: 1px dotted black;border-radius: 0.25em;box-sizing: border-box;margin-bottom: 0.5em;}#sk-container-id-2 div.sk-estimator:hover {background-color: #d4ebff;}#sk-container-id-2 div.sk-parallel-item::after {content: "";width: 100%;border-bottom: 1px solid gray;flex-grow: 1;}#sk-container-id-2 div.sk-label:hover label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-2 div.sk-serial::before {content: "";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: 0;}#sk-container-id-2 div.sk-serial {display: flex;flex-direction: column;align-items: center;background-color: white;padding-right: 0.2em;padding-left: 0.2em;position: relative;}#sk-container-id-2 div.sk-item {position: relative;z-index: 1;}#sk-container-id-2 div.sk-parallel {display: flex;align-items: stretch;justify-content: center;background-color: white;position: relative;}#sk-container-id-2 div.sk-item::before, #sk-container-id-2 div.sk-parallel-item::before {content: "";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: -1;}#sk-container-id-2 div.sk-parallel-item {display: flex;flex-direction: column;z-index: 1;position: relative;background-color: white;}#sk-container-id-2 div.sk-parallel-item:first-child::after {align-self: flex-end;width: 50%;}#sk-container-id-2 div.sk-parallel-item:last-child::after {align-self: flex-start;width: 50%;}#sk-container-id-2 div.sk-parallel-item:only-child::after {width: 0;}#sk-container-id-2 div.sk-dashed-wrapped {border: 1px dashed gray;margin: 0 0.4em 0.5em 0.4em;box-sizing: border-box;padding-bottom: 0.4em;background-color: white;}#sk-container-id-2 div.sk-label label {font-family: monospace;font-weight: bold;display: inline-block;line-height: 1.2em;}#sk-container-id-2 div.sk-label-container {text-align: center;}#sk-container-id-2 div.sk-container {/* jupyter's `normalize.less` sets `[hidden] { display: none; }` but bootstrap.min.css set `[hidden] { display: none !important; }` so we also need the `!important` here to be able to override the default hidden behavior on the sphinx rendered scikit-learn.org. See: https://github.com/scikit-learn/scikit-learn/issues/21755 */display: inline-block !important;position: relative;}#sk-container-id-2 div.sk-text-repr-fallback {display: none;}</style><div id="sk-container-id-2" class="sk-top-container"><div class="sk-text-repr-fallback"><pre>LogisticRegression(C=0.1, l1_ratio=0.6, max_iter=900, penalty=&#x27;elasticnet&#x27;,
+                   random_state=12, solver=&#x27;saga&#x27;)</pre><b>In a Jupyter environment, please rerun this cell to show the HTML representation or trust the notebook. <br />On GitHub, the HTML representation is unable to render, please try loading this page with nbviewer.org.</b></div><div class="sk-container" hidden><div class="sk-item"><div class="sk-estimator sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-4" type="checkbox" checked><label for="sk-estimator-id-4" class="sk-toggleable__label sk-toggleable__label-arrow">LogisticRegression</label><div class="sk-toggleable__content"><pre>LogisticRegression(C=0.1, l1_ratio=0.6, max_iter=900, penalty=&#x27;elasticnet&#x27;,
+                   random_state=12, solver=&#x27;saga&#x27;)</pre></div></div></div></div></div>
 
 ``` python
 enet_df = pd.DataFrame({
     'column' : X.columns,
-    'coefficient' : np.abs(lr.coef_.ravel())
+    'coefficient' : np.abs(lr_elastic.coef_.ravel())
 }).sort_values('coefficient', ascending=False)
 
 enet_df
 ```
 
 <div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 
 |     | column                                            | coefficient |
 |-----|---------------------------------------------------|-------------|
-| 12  | disease_extent_at_time_impact_was_sent_Metasta... | 0.864968    |
-| 16  | sample_type_Primary                               | 0.621489    |
-| 1   | fraction_genome_altered                           | 0.571824    |
-| 7   | prostate_tissue_binary                            | 0.501981    |
-| 6   | adenocarcinoma_poorly_diff_carcinoma_binary       | 0.344367    |
-| 8   | race_white                                        | 0.249705    |
-| 2   | gleason_grade                                     | 0.208185    |
+| 12  | disease_extent_at_time_impact_was_sent_Metasta... | 0.864904    |
+| 16  | sample_type_Primary                               | 0.621556    |
+| 1   | fraction_genome_altered                           | 0.571822    |
+| 7   | prostate_tissue_binary                            | 0.501979    |
+| 6   | adenocarcinoma_poorly_diff_carcinoma_binary       | 0.344366    |
+| 8   | race_white                                        | 0.249704    |
+| 2   | gleason_grade                                     | 0.208187    |
 | 18  | smoking_Former                                    | 0.156965    |
-| 4   | prostate-specific_antigen                         | 0.119296    |
-| 14  | disease_extent_at_time_impact_was_sent_Metasta... | 0.103656    |
+| 4   | prostate-specific_antigen                         | 0.119297    |
+| 14  | disease_extent_at_time_impact_was_sent_Metasta... | 0.103649    |
 | 11  | 8q_arm_Not called                                 | 0.090525    |
-| 13  | disease_extent_at_time_impact_was_sent_Metasta... | 0.083132    |
-| 15  | disease_extent_at_time_impact_was_sent_Regiona... | 0.064292    |
+| 13  | disease_extent_at_time_impact_was_sent_Metasta... | 0.083195    |
+| 15  | disease_extent_at_time_impact_was_sent_Regiona... | 0.064293    |
 | 17  | smoking_Current                                   | 0.049983    |
-| 3   | m_stage                                           | 0.047587    |
+| 3   | m_stage                                           | 0.047588    |
 | 5   | tmb\_(nonsynonymous)                              | 0.046656    |
-| 9   | 8q_arm_Gain                                       | 0.033725    |
+| 9   | 8q_arm_Gain                                       | 0.033723    |
 | 10  | 8q_arm_Loss                                       | 0.000667    |
 | 0   | age_at_diagnosis                                  | 0.000000    |
 
@@ -877,24 +1031,62 @@ enet_df
 ## First find best Random Forest model using 5-fold cross validation
 
 rf = RandomForestClassifier(n_jobs=-1, random_state=3)
+
 params = [{
     'criterion' : ['gini', 'entropy', 'log_loss'],
     'max_depth' : list(range(5, 11, 1)),
     'n_estimators' : list(range(100, 501, 100))
 }]
 
-gs = GridSearchCV(estimator=rf, param_grid=params, cv=KFold(n_splits=5, shuffle=True, random_state=42), scoring='roc_auc')
+gs = GridSearchCV(
+    estimator=rf, 
+    param_grid=params, 
+    cv=KFold(n_splits=5, shuffle=True, random_state=42), 
+    scoring='roc_auc',
+    n_jobs=-1
+)
+
 gs.fit(X_scaled, y)
-gs.best_estimator_
+gs.best_estimator_.get_params()
 ```
 
+    {'bootstrap': True,
+     'ccp_alpha': 0.0,
+     'class_weight': None,
+     'criterion': 'gini',
+     'max_depth': 10,
+     'max_features': 'sqrt',
+     'max_leaf_nodes': None,
+     'max_samples': None,
+     'min_impurity_decrease': 0.0,
+     'min_samples_leaf': 1,
+     'min_samples_split': 2,
+     'min_weight_fraction_leaf': 0.0,
+     'n_estimators': 400,
+     'n_jobs': -1,
+     'oob_score': False,
+     'random_state': 3,
+     'verbose': 0,
+     'warm_start': False}
+
 ``` python
-rf = RandomForestClassifier(n_jobs=-1, max_depth=10, n_estimators=400, random_state=3)
-rf.fit(X_scaled, y)
+rf = RandomForestClassifier(**gs.best_estimator_.get_params()).fit(X_scaled, y)
 
 boruta = BorutaPy(rf, n_estimators='auto', verbose=0, random_state=12)
 boruta.fit(X_scaled, y)
 ```
+
+<style>#sk-container-id-3 {color: black;background-color: white;}#sk-container-id-3 pre{padding: 0;}#sk-container-id-3 div.sk-toggleable {background-color: white;}#sk-container-id-3 label.sk-toggleable__label {cursor: pointer;display: block;width: 100%;margin-bottom: 0;padding: 0.3em;box-sizing: border-box;text-align: center;}#sk-container-id-3 label.sk-toggleable__label-arrow:before {content: "▸";float: left;margin-right: 0.25em;color: #696969;}#sk-container-id-3 label.sk-toggleable__label-arrow:hover:before {color: black;}#sk-container-id-3 div.sk-estimator:hover label.sk-toggleable__label-arrow:before {color: black;}#sk-container-id-3 div.sk-toggleable__content {max-height: 0;max-width: 0;overflow: hidden;text-align: left;background-color: #f0f8ff;}#sk-container-id-3 div.sk-toggleable__content pre {margin: 0.2em;color: black;border-radius: 0.25em;background-color: #f0f8ff;}#sk-container-id-3 input.sk-toggleable__control:checked~div.sk-toggleable__content {max-height: 200px;max-width: 100%;overflow: auto;}#sk-container-id-3 input.sk-toggleable__control:checked~label.sk-toggleable__label-arrow:before {content: "▾";}#sk-container-id-3 div.sk-estimator input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-3 div.sk-label input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-3 input.sk-hidden--visually {border: 0;clip: rect(1px 1px 1px 1px);clip: rect(1px, 1px, 1px, 1px);height: 1px;margin: -1px;overflow: hidden;padding: 0;position: absolute;width: 1px;}#sk-container-id-3 div.sk-estimator {font-family: monospace;background-color: #f0f8ff;border: 1px dotted black;border-radius: 0.25em;box-sizing: border-box;margin-bottom: 0.5em;}#sk-container-id-3 div.sk-estimator:hover {background-color: #d4ebff;}#sk-container-id-3 div.sk-parallel-item::after {content: "";width: 100%;border-bottom: 1px solid gray;flex-grow: 1;}#sk-container-id-3 div.sk-label:hover label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-3 div.sk-serial::before {content: "";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: 0;}#sk-container-id-3 div.sk-serial {display: flex;flex-direction: column;align-items: center;background-color: white;padding-right: 0.2em;padding-left: 0.2em;position: relative;}#sk-container-id-3 div.sk-item {position: relative;z-index: 1;}#sk-container-id-3 div.sk-parallel {display: flex;align-items: stretch;justify-content: center;background-color: white;position: relative;}#sk-container-id-3 div.sk-item::before, #sk-container-id-3 div.sk-parallel-item::before {content: "";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: -1;}#sk-container-id-3 div.sk-parallel-item {display: flex;flex-direction: column;z-index: 1;position: relative;background-color: white;}#sk-container-id-3 div.sk-parallel-item:first-child::after {align-self: flex-end;width: 50%;}#sk-container-id-3 div.sk-parallel-item:last-child::after {align-self: flex-start;width: 50%;}#sk-container-id-3 div.sk-parallel-item:only-child::after {width: 0;}#sk-container-id-3 div.sk-dashed-wrapped {border: 1px dashed gray;margin: 0 0.4em 0.5em 0.4em;box-sizing: border-box;padding-bottom: 0.4em;background-color: white;}#sk-container-id-3 div.sk-label label {font-family: monospace;font-weight: bold;display: inline-block;line-height: 1.2em;}#sk-container-id-3 div.sk-label-container {text-align: center;}#sk-container-id-3 div.sk-container {/* jupyter's `normalize.less` sets `[hidden] { display: none; }` but bootstrap.min.css set `[hidden] { display: none !important; }` so we also need the `!important` here to be able to override the default hidden behavior on the sphinx rendered scikit-learn.org. See: https://github.com/scikit-learn/scikit-learn/issues/21755 */display: inline-block !important;position: relative;}#sk-container-id-3 div.sk-text-repr-fallback {display: none;}</style><div id="sk-container-id-3" class="sk-top-container"><div class="sk-text-repr-fallback"><pre>BorutaPy(estimator=RandomForestClassifier(max_depth=10, n_estimators=61,
+                                          n_jobs=-1,
+                                          random_state=RandomState(MT19937) at 0x2108E43D840),
+         n_estimators=&#x27;auto&#x27;,
+         random_state=RandomState(MT19937) at 0x2108E43D840)</pre><b>In a Jupyter environment, please rerun this cell to show the HTML representation or trust the notebook. <br />On GitHub, the HTML representation is unable to render, please try loading this page with nbviewer.org.</b></div><div class="sk-container" hidden><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-5" type="checkbox" ><label for="sk-estimator-id-5" class="sk-toggleable__label sk-toggleable__label-arrow">BorutaPy</label><div class="sk-toggleable__content"><pre>BorutaPy(estimator=RandomForestClassifier(max_depth=10, n_estimators=61,
+                                          n_jobs=-1,
+                                          random_state=RandomState(MT19937) at 0x2108E43D840),
+         n_estimators=&#x27;auto&#x27;,
+         random_state=RandomState(MT19937) at 0x2108E43D840)</pre></div></div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-6" type="checkbox" ><label for="sk-estimator-id-6" class="sk-toggleable__label sk-toggleable__label-arrow">estimator: RandomForestClassifier</label><div class="sk-toggleable__content"><pre>RandomForestClassifier(max_depth=10, n_estimators=61, n_jobs=-1,
+                       random_state=RandomState(MT19937) at 0x2108E43D840)</pre></div></div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-7" type="checkbox" ><label for="sk-estimator-id-7" class="sk-toggleable__label sk-toggleable__label-arrow">RandomForestClassifier</label><div class="sk-toggleable__content"><pre>RandomForestClassifier(max_depth=10, n_estimators=61, n_jobs=-1,
+                       random_state=RandomState(MT19937) at 0x2108E43D840)</pre></div></div></div></div></div></div></div></div></div></div>
 
 ``` python
 boruta_df = pd.DataFrame({
@@ -910,26 +1102,37 @@ clin_features_df
 ```
 
 <div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 
 |     | column                                            | Rank | Keep  | coefficient |
 |-----|---------------------------------------------------|------|-------|-------------|
-| 12  | disease_extent_at_time_impact_was_sent_Metasta... | 1    | True  | 0.864968    |
-| 16  | sample_type_Primary                               | 1    | True  | 0.621489    |
-| 1   | fraction_genome_altered                           | 1    | True  | 0.571824    |
-| 7   | prostate_tissue_binary                            | 3    | False | 0.501981    |
-| 6   | adenocarcinoma_poorly_diff_carcinoma_binary       | 6    | False | 0.344367    |
-| 8   | race_white                                        | 9    | False | 0.249705    |
-| 2   | gleason_grade                                     | 1    | True  | 0.208185    |
+| 12  | disease_extent_at_time_impact_was_sent_Metasta... | 1    | True  | 0.864904    |
+| 16  | sample_type_Primary                               | 1    | True  | 0.621556    |
+| 1   | fraction_genome_altered                           | 1    | True  | 0.571822    |
+| 7   | prostate_tissue_binary                            | 3    | False | 0.501979    |
+| 6   | adenocarcinoma_poorly_diff_carcinoma_binary       | 6    | False | 0.344366    |
+| 8   | race_white                                        | 9    | False | 0.249704    |
+| 2   | gleason_grade                                     | 1    | True  | 0.208187    |
 | 18  | smoking_Former                                    | 8    | False | 0.156965    |
-| 4   | prostate-specific_antigen                         | 1    | True  | 0.119296    |
-| 14  | disease_extent_at_time_impact_was_sent_Metasta... | 12   | False | 0.103656    |
+| 4   | prostate-specific_antigen                         | 1    | True  | 0.119297    |
+| 14  | disease_extent_at_time_impact_was_sent_Metasta... | 12   | False | 0.103649    |
 | 11  | 8q_arm_Not called                                 | 11   | False | 0.090525    |
-| 13  | disease_extent_at_time_impact_was_sent_Metasta... | 2    | False | 0.083132    |
-| 15  | disease_extent_at_time_impact_was_sent_Regiona... | 5    | False | 0.064292    |
+| 13  | disease_extent_at_time_impact_was_sent_Metasta... | 2    | False | 0.083195    |
+| 15  | disease_extent_at_time_impact_was_sent_Regiona... | 5    | False | 0.064293    |
 | 17  | smoking_Current                                   | 10   | False | 0.049983    |
-| 3   | m_stage                                           | 4    | False | 0.047587    |
+| 3   | m_stage                                           | 4    | False | 0.047588    |
 | 5   | tmb\_(nonsynonymous)                              | 1    | True  | 0.046656    |
-| 9   | 8q_arm_Gain                                       | 7    | False | 0.033725    |
+| 9   | 8q_arm_Gain                                       | 7    | False | 0.033723    |
 | 10  | 8q_arm_Loss                                       | 13   | False | 0.000667    |
 | 0   | age_at_diagnosis                                  | 1    | True  | 0.000000    |
 
@@ -952,16 +1155,27 @@ df.head()
 ```
 
 <div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 
-|     | age_at_diagnosis | fraction_genome_altered | gleason_grade | prostate-specific_antigen | tmb\_(nonsynonymous) | disease_extent_at_time_impact_was_sent_Metastatic castration-resistant | sample_type_Primary | CCND1 | PTEN | RECQL4 | ... | TP53 | TCEB1 | ANKRD11 | AKT1 | MYC | AMER1 | FGF3 | NBN | AR  | target |
-|-----|------------------|-------------------------|---------------|---------------------------|----------------------|------------------------------------------------------------------------|---------------------|-------|------|--------|-----|------|-------|---------|------|-----|-------|------|-----|-----|--------|
-| 0   | 42.6             | 0.5462                  | 4.0           | 4.4                       | 1.109155             | 1.0                                                                    | 0.0                 | 0.0   | -1.5 | 0.0    | ... | -1.5 | 0.0   | 0.0     | 0.0  | 0.0 | 0.0   | 0.0  | 0.0 | 0.0 | 0      |
-| 1   | 79.6             | 0.0604                  | 4.0           | 211.0                     | 3.327466             | 1.0                                                                    | 0.0                 | 0.0   | 0.0  | 0.0    | ... | 0.0  | 0.0   | 0.0     | 0.0  | 0.0 | 0.0   | 0.0  | 0.0 | 0.0 | 0      |
-| 2   | 54.9             | 0.0023                  | 5.0           | 5.8                       | 1.109155             | 0.0                                                                    | 0.0                 | 0.0   | 0.0  | 0.0    | ... | 0.0  | 0.0   | 0.0     | 0.0  | 0.0 | 0.0   | 0.0  | 0.0 | 0.0 | 0      |
-| 3   | 60.0             | 0.5102                  | 5.0           | 3.0                       | 6.654932             | 1.0                                                                    | 0.0                 | 0.0   | 0.0  | 0.0    | ... | 0.0  | 0.0   | 0.0     | 0.0  | 0.0 | 0.0   | 0.0  | 0.0 | 0.0 | 0      |
-| 4   | 45.5             | 0.0134                  | 3.0           | 27.4                      | 1.109155             | 0.0                                                                    | 1.0                 | 0.0   | 0.0  | 0.0    | ... | 0.0  | 0.0   | 0.0     | 0.0  | 0.0 | 0.0   | 0.0  | 0.0 | 0.0 | 1      |
+|     | age_at_diagnosis | fraction_genome_altered | gleason_grade | prostate-specific_antigen | tmb\_(nonsynonymous) | disease_extent_at_time_impact_was_sent_Metastatic castration-resistant | sample_type_Primary | CCND1 | PTEN | PLCG2 | ... | ANKRD11 | AKT1 | MYC | AMER1 | RAD21 | FGF3 | AGO2 | NBN | AR  | target |
+|-----|------------------|-------------------------|---------------|---------------------------|----------------------|------------------------------------------------------------------------|---------------------|-------|------|-------|-----|---------|------|-----|-------|-------|------|------|-----|-----|--------|
+| 0   | 42.6             | 0.5462                  | 4.0           | 4.4                       | 1.109155             | 1.0                                                                    | 0.0                 | 0.0   | -1.5 | 0.0   | ... | 0.0     | 0.0  | 0.0 | 0.0   | 0.0   | 0.0  | 0.0  | 0.0 | 0.0 | 0      |
+| 1   | 79.6             | 0.0604                  | 4.0           | 211.0                     | 3.327466             | 1.0                                                                    | 0.0                 | 0.0   | 0.0  | 0.0   | ... | 0.0     | 0.0  | 0.0 | 0.0   | 0.0   | 0.0  | 0.0  | 0.0 | 0.0 | 0      |
+| 2   | 54.9             | 0.0023                  | 5.0           | 5.8                       | 1.109155             | 0.0                                                                    | 0.0                 | 0.0   | 0.0  | 0.0   | ... | 0.0     | 0.0  | 0.0 | 0.0   | 0.0   | 0.0  | 0.0  | 0.0 | 0.0 | 0      |
+| 3   | 60.0             | 0.5102                  | 5.0           | 3.0                       | 6.654932             | 1.0                                                                    | 0.0                 | 0.0   | 0.0  | 0.0   | ... | 0.0     | 0.0  | 0.0 | 0.0   | 0.0   | 0.0  | 0.0  | 0.0 | 0.0 | 0      |
+| 4   | 45.5             | 0.0134                  | 3.0           | 27.4                      | 1.109155             | 0.0                                                                    | 1.0                 | 0.0   | 0.0  | 0.0   | ... | 0.0     | 0.0  | 0.0 | 0.0   | 0.0   | 0.0  | 0.0  | 0.0 | 0.0 | 1      |
 
-<p>5 rows × 26 columns</p>
+<p>5 rows × 28 columns</p>
 </div>
 
 ``` python
@@ -1023,13 +1237,15 @@ models = {
 ``` python
 res = []
 for mod, args in models.items():
-    gs = GridSearchCV(estimator=args['pipe'], 
-                      param_grid=args['param_grid'], 
-                      scoring=['accuracy', 'roc_auc'], 
-                      n_jobs=-1, 
-                      cv=KFold(n_splits=10, shuffle=True, random_state=40), 
-                      return_train_score=True, 
-                      refit='roc_auc')
+    gs = GridSearchCV(
+        estimator=args['pipe'], 
+        param_grid=args['param_grid'], 
+        scoring=['accuracy', 'roc_auc'], 
+        n_jobs=-1, 
+        cv=KFold(n_splits=10, shuffle=True, random_state=40), 
+        return_train_score=True, 
+        refit='roc_auc'
+    )
     gs.fit(X_train, y_train)
     res.append({'model' : mod, 'best_parameters' : gs.best_params_, 'score' : gs.best_score_})
 ```
@@ -1039,15 +1255,26 @@ pd.DataFrame(res)
 ```
 
 <div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 
 |     | model               | best_parameters                                         | score    |
 |-----|---------------------|---------------------------------------------------------|----------|
-| 0   | logistic_regression | {'LR\_\_C': 0.001, 'LR\_\_l1_ratio': 0}                 | 0.819021 |
-| 1   | decision_tree       | {'DT\_\_criterion': 'entropy', 'DT\_\_max_depth': 5}    | 0.824251 |
-| 2   | random_forest       | {'RF\_\_criterion': 'entropy', 'RF\_\_max_depth': ...   | 0.906831 |
-| 3   | knn                 | {'KNN\_\_n_neighbors': 5, 'KNN\_\_weights': 'dista...   | 0.847111 |
-| 4   | svm                 | {'SVM\_\_C': 10, 'SVM\_\_degree': 3, 'SVM\_\_gamma':... | 0.841943 |
-| 5   | xgb                 | {'XGB\_\_learning_rate': 0.1, 'XGB\_\_max_depth': ...   | 0.923706 |
+| 0   | logistic_regression | {'LR\_\_C': 0.01, 'LR\_\_l1_ratio': 0}                  | 0.820360 |
+| 1   | decision_tree       | {'DT\_\_criterion': 'entropy', 'DT\_\_max_depth': 7}    | 0.826542 |
+| 2   | random_forest       | {'RF\_\_criterion': 'gini', 'RF\_\_max_depth': 15,...   | 0.905863 |
+| 3   | knn                 | {'KNN\_\_n_neighbors': 10, 'KNN\_\_weights': 'dist...   | 0.846650 |
+| 4   | svm                 | {'SVM\_\_C': 10, 'SVM\_\_degree': 3, 'SVM\_\_gamma':... | 0.844319 |
+| 5   | xgb                 | {'XGB\_\_learning_rate': 0.2, 'XGB\_\_max_depth': ...   | 0.923201 |
 
 </div>
 
@@ -1056,291 +1283,328 @@ res
 ```
 
     [{'model': 'logistic_regression',
-      'best_parameters': {'LR__C': 0.001, 'LR__l1_ratio': 0},
-      'score': 0.8190207677968658},
+      'best_parameters': {'LR__C': 0.01, 'LR__l1_ratio': 0},
+      'score': 0.8203601379045035},
      {'model': 'decision_tree',
-      'best_parameters': {'DT__criterion': 'entropy', 'DT__max_depth': 5},
-      'score': 0.8242512199473317},
+      'best_parameters': {'DT__criterion': 'entropy', 'DT__max_depth': 7},
+      'score': 0.8265418211286567},
      {'model': 'random_forest',
-      'best_parameters': {'RF__criterion': 'entropy',
+      'best_parameters': {'RF__criterion': 'gini',
        'RF__max_depth': 15,
        'RF__n_estimators': 500},
-      'score': 0.9068311391533369},
+      'score': 0.9058633093475865},
      {'model': 'knn',
-      'best_parameters': {'KNN__n_neighbors': 5, 'KNN__weights': 'distance'},
-      'score': 0.8471109487620518},
+      'best_parameters': {'KNN__n_neighbors': 10, 'KNN__weights': 'distance'},
+      'score': 0.8466499662961903},
      {'model': 'svm',
       'best_parameters': {'SVM__C': 10,
        'SVM__degree': 3,
        'SVM__gamma': 'scale',
        'SVM__kernel': 'rbf'},
-      'score': 0.8419430350900058},
+      'score': 0.8443188631829506},
      {'model': 'xgb',
-      'best_parameters': {'XGB__learning_rate': 0.1,
+      'best_parameters': {'XGB__learning_rate': 0.2,
        'XGB__max_depth': 5,
-       'XGB__n_estimators': 200},
-      'score': 0.9237063864400394}]
+       'XGB__n_estimators': 100},
+      'score': 0.9232007692894955}]
 
 It looks like XGBoost performed with the top score out of all the
 classifiers with AUC = 0.92. Random Forest also performed well with AUC
 = 0.90.
 
-#### XGBoost Model
+``` python
+## define plotting functions for evaluating models
+
+def plot_roc(model):
+    y_pred_proba = model.predict_proba(X_test)[::,-1]
+
+    fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+
+    fig, ax = plt.subplots(figsize=(10,7))
+    ax.plot(fpr, tpr, color='orange', label='ROC curve (AUC = {:.2f})'.format(roc_auc_score(y_test, y_pred_proba)))
+    ax.plot([0, 1], [0, 1], 'k--', label='Random guess', alpha=0.7)
+    ax.legend(loc='lower right', bbox_to_anchor=(1.4, 0))
+    ax.set_ylabel('True Positive Rate')
+    ax.set_xlabel('False Positive Rate')
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_title(str(type(model).__name__) + ' Testing AUC = ' + str(roc_auc_score(y_test, y_pred_proba)), fontsize=15)
+    fig.set_facecolor('w');
+
+def plot_confusion_matrix(model):
+
+    cm = confusion_matrix(y_test, model.predict(X_test))
+
+    # modify confusion matrix
+    modified_cm = []
+    for index,value in enumerate(cm):
+        if index == 0:
+            modified_cm.append(['TN = ' + str(value[0]), 'FP = ' + str(value[1])])
+        if index == 1:
+            modified_cm.append(['FN = ' + str(value[0]), 'TP = ' + str(value[1])])
+
+    # plot
+    fig, ax = plt.subplots(figsize=(10,10))
+    ax = sns.heatmap(cm, annot=np.array(modified_cm), cmap='Blues', fmt='', annot_kws={'size': 20}, 
+                linewidths=0.5, square=True, xticklabels=['Dead', 'Alive'], yticklabels=['Dead', 'Alive']);
+    ax.set_ylabel('Actual label', fontsize=12)
+    ax.set_xlabel('Predicted label', fontsize=12)
+    ax.set_title('Training accuracy: {}\nTesting accuracy: {}'.format(model.score(X_train, y_train), model.score(X_test, y_test)), fontsize=18)
+    fig.set_facecolor('w')
+    plt.tick_params(labelsize=15);
+```
 
 ``` python
 scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
-
-xgb = XGBClassifier(learning_rate=0.1, max_depth=5, n_estimators=200, random_state=42)
-xgb.fit(X_train, y_train)
-print('Training accuracy: {}'.format(xgb.score(X_train, y_train)))
-print('Testing accuracy: {}'.format(xgb.score(X_test, y_test)))
 ```
 
-    Training accuracy: 0.9719626168224299
-    Testing accuracy: 0.851089588377724
+#### XGBoost Model
 
 ``` python
-cm = confusion_matrix(y_test, xgb.predict(X_test))
+xgb = XGBClassifier(learning_rate=0.1, max_depth=5, n_estimators=200, random_state=42).fit(X_train, y_train)
+```
 
-plot_confusion_matrix(cm)
-plt.title('XGBoost model', fontsize=20);
+``` python
+plot_confusion_matrix(xgb)
+plot_roc(xgb)
 ```
 
 ![](README_files/figure-commonmark/cell-63-output-1.png)
 
-``` python
-y_pred_proba = xgb.predict_proba(X_test)[::,-1]
-
-fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
-
-fig, ax = plt.subplots(figsize=(10,7))
-ax.plot(fpr, tpr)
-ax.set_ylabel('True Positive Rate')
-ax.set_xlabel('False Positive Rate')
-ax.set_title('AUC = ' + str(roc_auc_score(y_test, y_pred_proba)));
-```
-
-![](README_files/figure-commonmark/cell-64-output-1.png)
+![](README_files/figure-commonmark/cell-63-output-2.png)
 
 #### Random Forest Model
 
 ``` python
-rf = RandomForestClassifier(max_depth=15, n_estimators=500, criterion='entropy', random_state=42)
-rf.fit(X_train, y_train)
-print('Training accuracy: {}'.format(rf.score(X_train, y_train)))
-print('Testing accuracy: {}'.format(rf.score(X_test, y_test)))
+rf = RandomForestClassifier(max_depth=15, n_estimators=500, criterion='entropy', random_state=42).fit(X_train, y_train)
 ```
-
-    Training accuracy: 0.9755970924195223
-    Testing accuracy: 0.8329297820823245
 
 ``` python
-cm = confusion_matrix(y_test, rf.predict(X_test))
-plot_confusion_matrix(cm)
-plt.title('Random Forest model', fontsize=20);
+plot_confusion_matrix(rf)
+plot_roc(rf)
 ```
 
-![](README_files/figure-commonmark/cell-66-output-1.png)
+![](README_files/figure-commonmark/cell-65-output-1.png)
 
-``` python
-y_pred_proba = rf.predict_proba(X_test)[::,-1]
-
-fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
-
-fig, ax = plt.subplots(figsize=(10,7))
-ax.plot(fpr, tpr)
-ax.set_ylabel('True Positive Rate')
-ax.set_xlabel('False Positive Rate')
-ax.set_title('AUC = ' + str(roc_auc_score(y_test, y_pred_proba)));
-```
-
-![](README_files/figure-commonmark/cell-67-output-1.png)
+![](README_files/figure-commonmark/cell-65-output-2.png)
 
 ## Hyperparameter Tuning <a class="anchor" id="seventh-bullet"></a>
 
 The top performing models are both tree models, and judging from the
 high training accuracy (0.93 for XGBoost and 0.97 for Random Forest)
-they are overfitting.
+they are overfitting, which tree models tend to do. I will define the
+hyperparameter space with the overfitting in mind. Some things I will
+tune for both models are:
+
+    - `max_depth` : limiting this parameter can help prevent trees from becoming too complex and overfitting
+
+    - `n_estimators` : increasing this value can lead to decrease in overfitting by include the number of trees in the ensemble, but I need to keep in mind that it can only improve performance up to a certain point
+
+XGBoost also has some penalty parameters that can be tuned to help with
+overfitting such as lambda (L2 regularization) and alpha (L1
+regularization).
 
 I will use ‘roc_auc’ for the scoring metric because optimizing this
 metric helps to control overfitting more than by optimizing for
 accuracy.
 
-XGBoost has some penalty parameters that can be tuned to help with
-overfitting such as lambda and alpha.
+Aditionally, I will be using `RandomizedSearchCV` instead of
+`GridSearchCV` for the hyperparameter tuning. Grid search performs an
+exhaustive search over every combination of parameters, driving up the
+computation time for testing even medium sized sets of parameters. Using
+a randomized search instead significantly decreases the computation time
+by randomly sampling the hyperparameters from a distribution. A drawback
+of this method is that the optimal set of hyperparameters is not
+guaranteed to be found, so to address this I will increase the `n_iter`
+parameter to increase the chances of finding the best parameters.
 
-#### XGBoost Hyperparameter Tuning
-
-``` python
-params = {
-    'max_depth': [3, 5, 8], 
-    'learning_rate' : [0.01, 0.03, 0.05], # smaller makes more robust to overfitting
-    'colsample_bytree': [0.5, 0.8, 1.0], # fraction of features that are sampled to train each tree
-    'reg_alpha': [0, 0.5, 1, 1.5],     # L1 regularization, default 0
-    'reg_lambda': [1, 1.5, 2],    # L2 regularization, default 1
-    'gamma': [0, 0.1, 0.5]  # minimum reduction in loss
-}
-
-gs = GridSearchCV(estimator=xgb, 
-                  param_grid=params, 
-                  scoring='roc_auc', 
-                  n_jobs=-1, 
-                  cv=KFold(n_splits=10, shuffle=True, random_state=40)
-                  )
-gs.fit(X_train, y_train)
-```
-
-``` python
-gs.best_params_
-```
-
-    {'colsample_bytree': 0.5,
-     'gamma': 0.5,
-     'learning_rate': 0.05,
-     'max_depth': 5,
-     'reg_alpha': 0,
-     'reg_lambda': 1.5}
-
-``` python
-gs.best_score_
-```
-
-    0.9246999258518702
-
-``` python
-xgb_final = XGBClassifier(learning_rate=0.05, 
-                          max_depth=5, 
-                          n_estimators=200, 
-                          random_state=66,
-                          colsample_bytree=0.5,
-                          gamma=0,
-                          reg_alpha=0,
-                          reg_lambda=1,
-                          subsample=1)
-
-xgb_final.fit(X_train, y_train)
-print('Training accuracy: {}'.format(xgb_final.score(X_train, y_train)))
-print('Testing accuracy: {}'.format(xgb_final.score(X_test, y_test)))
-```
-
-    Training accuracy: 0.9247144340602285
-    Testing accuracy: 0.8389830508474576
-
-It appears that the training accuracy went down a bit, so the model is
-slightly less overfit, and the testing accuracy did not decrease too
-much!
-
-``` python
-cm = confusion_matrix(y_test, xgb_final.predict(X_test))
-plot_confusion_matrix(cm)
-```
-
-![](README_files/figure-commonmark/cell-72-output-1.png)
-
-``` python
-y_pred_proba = xgb_final.predict_proba(X_test)[::,-1]
-
-fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
-
-fig, ax = plt.subplots(figsize=(10,7))
-ax.plot(fpr, tpr)
-ax.set_ylabel('True Positive Rate')
-ax.set_xlabel('False Positive Rate')
-ax.set_title('Testing AUC = ' + str(roc_auc_score(y_test, y_pred_proba)));
-```
-
-![](README_files/figure-commonmark/cell-73-output-1.png)
+To optimize the randomized search, I will also take advantage of the
+`scipy.stats` package to parse large continious distributions for the
+continuous parameters.
 
 #### Random Forest Hyperparameter Tuning
 
 ``` python
-params = {
-    'min_samples_split': [2, 4, 6, 8],
+params = [{
+    'min_samples_split': randint(4, 41),
     'max_features': ['sqrt', 'log2', None],
-    'min_samples_leaf': [1, 3, 5],
-    'max_leaf_nodes' : [None, 2, 4, 6]
-}
+    'min_samples_leaf': randint(1, 41),
+    'max_leaf_nodes': randint(10, 100),
+    'criterion': ['gini', 'entropy', 'log_loss'],
+    'max_depth': [None] + list(randint(2, 20).rvs(10)),
+    'n_estimators': randint(100, 1000)
+}]
 
-gs = GridSearchCV(
-    estimator=rf, 
-    param_grid=params, 
-    scoring='roc_auc', 
-    n_jobs=-1, 
-    cv=KFold(n_splits=10, shuffle=True, random_state=40)
-)
-gs.fit(X_train, y_train)
-```
-
-``` python
-gs.best_estimator_.get_params()
-```
-
-    {'bootstrap': True,
-     'ccp_alpha': 0.0,
-     'class_weight': None,
-     'criterion': 'entropy',
-     'max_depth': 15,
-     'max_features': 'sqrt',
-     'max_leaf_nodes': None,
-     'max_samples': None,
-     'min_impurity_decrease': 0.0,
-     'min_samples_leaf': 1,
-     'min_samples_split': 2,
-     'min_weight_fraction_leaf': 0.0,
-     'n_estimators': 500,
-     'n_jobs': None,
-     'oob_score': False,
-     'random_state': 42,
-     'verbose': 0,
-     'warm_start': False}
-
-``` python
-print(gs.best_score_)
-```
-
-    0.9070158396280217
-
-``` python
-rf_final = RandomForestClassifier(
-    max_depth=15, max_features='sqrt', min_samples_leaf=1, min_samples_split=2,
-    n_estimators=500, n_jobs=-1, random_state=29, criterion='entropy'
+rs = RandomizedSearchCV(
+    estimator=rf,
+    param_distributions=params,
+    scoring='roc_auc',
+    n_jobs=-1,
+    cv=KFold(n_splits=10, shuffle=True, random_state=40),
+    n_iter=150,
+    random_state=39
 )
 
-rf_final.fit(X_train, y_train)
-print('Training accuracy: {}'.format(rf_final.score(X_train, y_train)))
-print('Testing accuracy: {}'.format(rf_final.score(X_test, y_test)))
+rs.fit(X_train, y_train)
 ```
 
-    Training accuracy: 0.9724818276220145
-    Testing accuracy: 0.8305084745762712
-
-It appears that even after hyperparameter tuning, the random forest
-model is still overfitting the training data. The XGBoost model may be
-the better choice for this problem if there is no additional data
-available.
+<style>#sk-container-id-4 {color: black;background-color: white;}#sk-container-id-4 pre{padding: 0;}#sk-container-id-4 div.sk-toggleable {background-color: white;}#sk-container-id-4 label.sk-toggleable__label {cursor: pointer;display: block;width: 100%;margin-bottom: 0;padding: 0.3em;box-sizing: border-box;text-align: center;}#sk-container-id-4 label.sk-toggleable__label-arrow:before {content: "▸";float: left;margin-right: 0.25em;color: #696969;}#sk-container-id-4 label.sk-toggleable__label-arrow:hover:before {color: black;}#sk-container-id-4 div.sk-estimator:hover label.sk-toggleable__label-arrow:before {color: black;}#sk-container-id-4 div.sk-toggleable__content {max-height: 0;max-width: 0;overflow: hidden;text-align: left;background-color: #f0f8ff;}#sk-container-id-4 div.sk-toggleable__content pre {margin: 0.2em;color: black;border-radius: 0.25em;background-color: #f0f8ff;}#sk-container-id-4 input.sk-toggleable__control:checked~div.sk-toggleable__content {max-height: 200px;max-width: 100%;overflow: auto;}#sk-container-id-4 input.sk-toggleable__control:checked~label.sk-toggleable__label-arrow:before {content: "▾";}#sk-container-id-4 div.sk-estimator input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-4 div.sk-label input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-4 input.sk-hidden--visually {border: 0;clip: rect(1px 1px 1px 1px);clip: rect(1px, 1px, 1px, 1px);height: 1px;margin: -1px;overflow: hidden;padding: 0;position: absolute;width: 1px;}#sk-container-id-4 div.sk-estimator {font-family: monospace;background-color: #f0f8ff;border: 1px dotted black;border-radius: 0.25em;box-sizing: border-box;margin-bottom: 0.5em;}#sk-container-id-4 div.sk-estimator:hover {background-color: #d4ebff;}#sk-container-id-4 div.sk-parallel-item::after {content: "";width: 100%;border-bottom: 1px solid gray;flex-grow: 1;}#sk-container-id-4 div.sk-label:hover label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-4 div.sk-serial::before {content: "";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: 0;}#sk-container-id-4 div.sk-serial {display: flex;flex-direction: column;align-items: center;background-color: white;padding-right: 0.2em;padding-left: 0.2em;position: relative;}#sk-container-id-4 div.sk-item {position: relative;z-index: 1;}#sk-container-id-4 div.sk-parallel {display: flex;align-items: stretch;justify-content: center;background-color: white;position: relative;}#sk-container-id-4 div.sk-item::before, #sk-container-id-4 div.sk-parallel-item::before {content: "";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: -1;}#sk-container-id-4 div.sk-parallel-item {display: flex;flex-direction: column;z-index: 1;position: relative;background-color: white;}#sk-container-id-4 div.sk-parallel-item:first-child::after {align-self: flex-end;width: 50%;}#sk-container-id-4 div.sk-parallel-item:last-child::after {align-self: flex-start;width: 50%;}#sk-container-id-4 div.sk-parallel-item:only-child::after {width: 0;}#sk-container-id-4 div.sk-dashed-wrapped {border: 1px dashed gray;margin: 0 0.4em 0.5em 0.4em;box-sizing: border-box;padding-bottom: 0.4em;background-color: white;}#sk-container-id-4 div.sk-label label {font-family: monospace;font-weight: bold;display: inline-block;line-height: 1.2em;}#sk-container-id-4 div.sk-label-container {text-align: center;}#sk-container-id-4 div.sk-container {/* jupyter's `normalize.less` sets `[hidden] { display: none; }` but bootstrap.min.css set `[hidden] { display: none !important; }` so we also need the `!important` here to be able to override the default hidden behavior on the sphinx rendered scikit-learn.org. See: https://github.com/scikit-learn/scikit-learn/issues/21755 */display: inline-block !important;position: relative;}#sk-container-id-4 div.sk-text-repr-fallback {display: none;}</style><div id="sk-container-id-4" class="sk-top-container"><div class="sk-text-repr-fallback"><pre>RandomizedSearchCV(cv=KFold(n_splits=10, random_state=40, shuffle=True),
+                   estimator=RandomForestClassifier(criterion=&#x27;entropy&#x27;,
+                                                    max_depth=15,
+                                                    n_estimators=500,
+                                                    random_state=42),
+                   n_iter=150, n_jobs=-1,
+                   param_distributions=[{&#x27;criterion&#x27;: [&#x27;gini&#x27;, &#x27;entropy&#x27;,
+                                                       &#x27;log_loss&#x27;],
+                                         &#x27;max_depth&#x27;: [None, 10, 15, 16, 19, 13,
+                                                       9, 14, 3, 16, 16],
+                                         &#x27;max_features&#x27;: [&#x27;sqrt&#x27;, &#x27;log2&#x27;, None],
+                                         &#x27;max_leaf_no...ucture.rv_frozen object at 0x000002108C638370&gt;,
+                                         &#x27;min_samples_leaf&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C6381F0&gt;,
+                                         &#x27;min_samples_split&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108E1801F0&gt;,
+                                         &#x27;n_estimators&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C638670&gt;}],
+                   random_state=39, scoring=&#x27;roc_auc&#x27;)</pre><b>In a Jupyter environment, please rerun this cell to show the HTML representation or trust the notebook. <br />On GitHub, the HTML representation is unable to render, please try loading this page with nbviewer.org.</b></div><div class="sk-container" hidden><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-8" type="checkbox" ><label for="sk-estimator-id-8" class="sk-toggleable__label sk-toggleable__label-arrow">RandomizedSearchCV</label><div class="sk-toggleable__content"><pre>RandomizedSearchCV(cv=KFold(n_splits=10, random_state=40, shuffle=True),
+                   estimator=RandomForestClassifier(criterion=&#x27;entropy&#x27;,
+                                                    max_depth=15,
+                                                    n_estimators=500,
+                                                    random_state=42),
+                   n_iter=150, n_jobs=-1,
+                   param_distributions=[{&#x27;criterion&#x27;: [&#x27;gini&#x27;, &#x27;entropy&#x27;,
+                                                       &#x27;log_loss&#x27;],
+                                         &#x27;max_depth&#x27;: [None, 10, 15, 16, 19, 13,
+                                                       9, 14, 3, 16, 16],
+                                         &#x27;max_features&#x27;: [&#x27;sqrt&#x27;, &#x27;log2&#x27;, None],
+                                         &#x27;max_leaf_no...ucture.rv_frozen object at 0x000002108C638370&gt;,
+                                         &#x27;min_samples_leaf&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C6381F0&gt;,
+                                         &#x27;min_samples_split&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108E1801F0&gt;,
+                                         &#x27;n_estimators&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C638670&gt;}],
+                   random_state=39, scoring=&#x27;roc_auc&#x27;)</pre></div></div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-9" type="checkbox" ><label for="sk-estimator-id-9" class="sk-toggleable__label sk-toggleable__label-arrow">estimator: RandomForestClassifier</label><div class="sk-toggleable__content"><pre>RandomForestClassifier(criterion=&#x27;entropy&#x27;, max_depth=15, n_estimators=500,
+                       random_state=42)</pre></div></div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-10" type="checkbox" ><label for="sk-estimator-id-10" class="sk-toggleable__label sk-toggleable__label-arrow">RandomForestClassifier</label><div class="sk-toggleable__content"><pre>RandomForestClassifier(criterion=&#x27;entropy&#x27;, max_depth=15, n_estimators=500,
+                       random_state=42)</pre></div></div></div></div></div></div></div></div></div></div>
 
 ``` python
-cm = confusion_matrix(y_test, rf_final.predict(X_test))
-plot_confusion_matrix(cm)
+rf_final = RandomForestClassifier(**rs.best_params_).fit(X_train, y_train)
+plot_confusion_matrix(rf_final)
+plot_roc(rf_final)
 ```
 
-![](README_files/figure-commonmark/cell-78-output-1.png)
+![](README_files/figure-commonmark/cell-67-output-1.png)
+
+![](README_files/figure-commonmark/cell-67-output-2.png)
+
+The final random forest model’s AUC score on the validation set is 0.90.
+Although it is a slight decrease from 0.91 in the initial model, it
+seems that the hyperparameter tuning has helped to reduce the
+overfitting of the model, which is reflected in the decrease in accuracy
+from 0.96 to 0.90. The tradeoff between a slightly lower AUC score and
+the reduction in overfitting leads me to believe that this model is more
+reliable in generalizing to new data.
+
+#### XGBoost Hyperparameter Tuning
 
 ``` python
-y_pred_proba = rf_final.predict_proba(X_test)[::,-1]
+params = [{
+    'max_depth': randint(3, 8),
+    'learning_rate': uniform(0.005, 0.2), # smaller makes more robust to overfitting
+    'colsample_bytree': uniform(0.3, 0.7), # fraction of features that are sampled to train each tree
+    'reg_alpha': uniform(0, 10), # L1 regularization, default 0
+    'reg_lambda': uniform(1, 10), # L2 regularization, default 1
+    'min_split_loss': uniform(0, 50), # minimum reduction in loss
+    'n_estimators': randint(100, 1000),
+    'min_child_weight': uniform(0, 100), # the higher, the more conservative the algorithm
+    'subsample': uniform(0.1, 0.8) # subsample ratio of training instances
 
-fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+}]
 
-fig, ax = plt.subplots(figsize=(10,7))
-ax.plot(fpr, tpr)
-ax.set_ylabel('True Positive Rate')
-ax.set_xlabel('False Positive Rate')
-ax.set_title('Testing AUC = ' + str(roc_auc_score(y_test, y_pred_proba)));
+rs = RandomizedSearchCV(
+    estimator=xgb,
+    param_distributions=params,
+    scoring='roc_auc',
+    n_jobs=-1,
+    cv=KFold(n_splits=10, shuffle=True, random_state=40),
+    n_iter=200,
+    random_state=39
+)
+
+rs.fit(X_train, y_train)
 ```
 
-![](README_files/figure-commonmark/cell-79-output-1.png)
+<style>#sk-container-id-5 {color: black;background-color: white;}#sk-container-id-5 pre{padding: 0;}#sk-container-id-5 div.sk-toggleable {background-color: white;}#sk-container-id-5 label.sk-toggleable__label {cursor: pointer;display: block;width: 100%;margin-bottom: 0;padding: 0.3em;box-sizing: border-box;text-align: center;}#sk-container-id-5 label.sk-toggleable__label-arrow:before {content: "▸";float: left;margin-right: 0.25em;color: #696969;}#sk-container-id-5 label.sk-toggleable__label-arrow:hover:before {color: black;}#sk-container-id-5 div.sk-estimator:hover label.sk-toggleable__label-arrow:before {color: black;}#sk-container-id-5 div.sk-toggleable__content {max-height: 0;max-width: 0;overflow: hidden;text-align: left;background-color: #f0f8ff;}#sk-container-id-5 div.sk-toggleable__content pre {margin: 0.2em;color: black;border-radius: 0.25em;background-color: #f0f8ff;}#sk-container-id-5 input.sk-toggleable__control:checked~div.sk-toggleable__content {max-height: 200px;max-width: 100%;overflow: auto;}#sk-container-id-5 input.sk-toggleable__control:checked~label.sk-toggleable__label-arrow:before {content: "▾";}#sk-container-id-5 div.sk-estimator input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-5 div.sk-label input.sk-toggleable__control:checked~label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-5 input.sk-hidden--visually {border: 0;clip: rect(1px 1px 1px 1px);clip: rect(1px, 1px, 1px, 1px);height: 1px;margin: -1px;overflow: hidden;padding: 0;position: absolute;width: 1px;}#sk-container-id-5 div.sk-estimator {font-family: monospace;background-color: #f0f8ff;border: 1px dotted black;border-radius: 0.25em;box-sizing: border-box;margin-bottom: 0.5em;}#sk-container-id-5 div.sk-estimator:hover {background-color: #d4ebff;}#sk-container-id-5 div.sk-parallel-item::after {content: "";width: 100%;border-bottom: 1px solid gray;flex-grow: 1;}#sk-container-id-5 div.sk-label:hover label.sk-toggleable__label {background-color: #d4ebff;}#sk-container-id-5 div.sk-serial::before {content: "";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: 0;}#sk-container-id-5 div.sk-serial {display: flex;flex-direction: column;align-items: center;background-color: white;padding-right: 0.2em;padding-left: 0.2em;position: relative;}#sk-container-id-5 div.sk-item {position: relative;z-index: 1;}#sk-container-id-5 div.sk-parallel {display: flex;align-items: stretch;justify-content: center;background-color: white;position: relative;}#sk-container-id-5 div.sk-item::before, #sk-container-id-5 div.sk-parallel-item::before {content: "";position: absolute;border-left: 1px solid gray;box-sizing: border-box;top: 0;bottom: 0;left: 50%;z-index: -1;}#sk-container-id-5 div.sk-parallel-item {display: flex;flex-direction: column;z-index: 1;position: relative;background-color: white;}#sk-container-id-5 div.sk-parallel-item:first-child::after {align-self: flex-end;width: 50%;}#sk-container-id-5 div.sk-parallel-item:last-child::after {align-self: flex-start;width: 50%;}#sk-container-id-5 div.sk-parallel-item:only-child::after {width: 0;}#sk-container-id-5 div.sk-dashed-wrapped {border: 1px dashed gray;margin: 0 0.4em 0.5em 0.4em;box-sizing: border-box;padding-bottom: 0.4em;background-color: white;}#sk-container-id-5 div.sk-label label {font-family: monospace;font-weight: bold;display: inline-block;line-height: 1.2em;}#sk-container-id-5 div.sk-label-container {text-align: center;}#sk-container-id-5 div.sk-container {/* jupyter's `normalize.less` sets `[hidden] { display: none; }` but bootstrap.min.css set `[hidden] { display: none !important; }` so we also need the `!important` here to be able to override the default hidden behavior on the sphinx rendered scikit-learn.org. See: https://github.com/scikit-learn/scikit-learn/issues/21755 */display: inline-block !important;position: relative;}#sk-container-id-5 div.sk-text-repr-fallback {display: none;}</style><div id="sk-container-id-5" class="sk-top-container"><div class="sk-text-repr-fallback"><pre>RandomizedSearchCV(cv=KFold(n_splits=10, random_state=40, shuffle=True),
+                   estimator=XGBClassifier(base_score=None, booster=None,
+                                           callbacks=None,
+                                           colsample_bylevel=None,
+                                           colsample_bynode=None,
+                                           colsample_bytree=None,
+                                           early_stopping_rounds=None,
+                                           enable_categorical=False,
+                                           eval_metric=None, feature_types=None,
+                                           gamma=None, gpu_id=None,
+                                           grow_policy=None,
+                                           importance_type=N...
+                                         &#x27;n_estimators&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C6343D0&gt;,
+                                         &#x27;reg_alpha&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C634280&gt;,
+                                         &#x27;reg_lambda&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C634E80&gt;,
+                                         &#x27;subsample&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C6343A0&gt;}],
+                   random_state=39, scoring=&#x27;roc_auc&#x27;)</pre><b>In a Jupyter environment, please rerun this cell to show the HTML representation or trust the notebook. <br />On GitHub, the HTML representation is unable to render, please try loading this page with nbviewer.org.</b></div><div class="sk-container" hidden><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-11" type="checkbox" ><label for="sk-estimator-id-11" class="sk-toggleable__label sk-toggleable__label-arrow">RandomizedSearchCV</label><div class="sk-toggleable__content"><pre>RandomizedSearchCV(cv=KFold(n_splits=10, random_state=40, shuffle=True),
+                   estimator=XGBClassifier(base_score=None, booster=None,
+                                           callbacks=None,
+                                           colsample_bylevel=None,
+                                           colsample_bynode=None,
+                                           colsample_bytree=None,
+                                           early_stopping_rounds=None,
+                                           enable_categorical=False,
+                                           eval_metric=None, feature_types=None,
+                                           gamma=None, gpu_id=None,
+                                           grow_policy=None,
+                                           importance_type=N...
+                                         &#x27;n_estimators&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C6343D0&gt;,
+                                         &#x27;reg_alpha&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C634280&gt;,
+                                         &#x27;reg_lambda&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C634E80&gt;,
+                                         &#x27;subsample&#x27;: &lt;scipy.stats._distn_infrastructure.rv_frozen object at 0x000002108C6343A0&gt;}],
+                   random_state=39, scoring=&#x27;roc_auc&#x27;)</pre></div></div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-12" type="checkbox" ><label for="sk-estimator-id-12" class="sk-toggleable__label sk-toggleable__label-arrow">estimator: XGBClassifier</label><div class="sk-toggleable__content"><pre>XGBClassifier(base_score=None, booster=None, callbacks=None,
+              colsample_bylevel=None, colsample_bynode=None,
+              colsample_bytree=None, early_stopping_rounds=None,
+              enable_categorical=False, eval_metric=None, feature_types=None,
+              gamma=None, gpu_id=None, grow_policy=None, importance_type=None,
+              interaction_constraints=None, learning_rate=0.1, max_bin=None,
+              max_cat_threshold=None, max_cat_to_onehot=None,
+              max_delta_step=None, max_depth=5, max_leaves=None,
+              min_child_weight=None, missing=nan, monotone_constraints=None,
+              n_estimators=200, n_jobs=None, num_parallel_tree=None,
+              predictor=None, random_state=42, ...)</pre></div></div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-13" type="checkbox" ><label for="sk-estimator-id-13" class="sk-toggleable__label sk-toggleable__label-arrow">XGBClassifier</label><div class="sk-toggleable__content"><pre>XGBClassifier(base_score=None, booster=None, callbacks=None,
+              colsample_bylevel=None, colsample_bynode=None,
+              colsample_bytree=None, early_stopping_rounds=None,
+              enable_categorical=False, eval_metric=None, feature_types=None,
+              gamma=None, gpu_id=None, grow_policy=None, importance_type=None,
+              interaction_constraints=None, learning_rate=0.1, max_bin=None,
+              max_cat_threshold=None, max_cat_to_onehot=None,
+              max_delta_step=None, max_depth=5, max_leaves=None,
+              min_child_weight=None, missing=nan, monotone_constraints=None,
+              n_estimators=200, n_jobs=None, num_parallel_tree=None,
+              predictor=None, random_state=42, ...)</pre></div></div></div></div></div></div></div></div></div></div>
 
-Overall, the XGBoost model performed the best in predicting the
-patients’ outcomes, achieving an AUC score of 0.92 on the testing set.
+``` python
+xgb_final = XGBClassifier(**rs.best_params_).fit(X_train, y_train)
+plot_confusion_matrix(xgb_final)
+plot_roc(xgb_final)
+```
+
+![](README_files/figure-commonmark/cell-69-output-1.png)
+
+![](README_files/figure-commonmark/cell-69-output-2.png)
+
+It appears that the XGBoost model’s regularization parameters were
+indeed effective in reducing the overfitting, decreasing the training
+accuracy from 0.97 to 0.83. There was a bit of a sacrifice in the AUC
+score, which decreased from 0.92 to 0.89 on the testing set, but since
+the difference between the training and testing accuracy is 0.03, I am
+confident that the final XGBoost model will be able to generalize well
+on new, unseen data.
+
+Although the AUC score for the random forest was slightly higher than
+the AUC for the XGBoost, I would say that I am more confident that the
+XGBoost model would accurately predict the vital status of prostate
+cancer patients using clinical and genomic data that the model has not
+seen before.
